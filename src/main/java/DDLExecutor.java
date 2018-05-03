@@ -68,6 +68,10 @@ public class DDLExecutor {
 
             Statement statement = connection.createStatement();
 
+            statement.executeUpdate("DROP SCHEMA IF EXISTS facturacio;");
+            statement.executeUpdate("CREATE SCHEMA IF NOT EXISTS facturacio;");
+            statement.executeUpdate("USE facturacio;");
+
             statement.executeUpdate(this.producteDDL);
             statement.executeUpdate(this.facturaDDL);
             statement.executeUpdate(this.cistellaDDL);

@@ -31,6 +31,7 @@ public class Main {
 
         Facturar facturar = new Facturar(pool);
 
+        facturar.batchData();
         facturar.doBillingProcess();
 
 
