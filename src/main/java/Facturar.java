@@ -61,21 +61,29 @@ public class Facturar {
             while (baskets.next()) {
                 Integer idCistella = baskets.getInt("id");
 
-                Savepoint savepoint = connection.setSavepoint();
-
+                Savepoint savepoint  = null;
                 try {
+
+                    Statement lockStatement = connection.createStatement();
+
+                    lockStatement.execute("LOCK TABLES factura WRITE, producte WRITE, cistella_producte WRITE, cistella WRITE, factura_producte WRITE;");
+
+                    savepoint = connection.setSavepoint();
+
                     Integer idFactura = initBill(idCistella, connection);
 
                     Double importTotalFactura = checkBill(idCistella, idFactura, connection);
 
                     updateBillImport(idFactura, importTotalFactura, connection);
 
-                    connection.releaseSavepoint(savepoint);
 
                 } catch (ReturnToSavePointException rtspe) {
 
                     connection.rollback(savepoint);
 
+                } finally {
+                    Statement unlockStatement = connection.createStatement();
+                    unlockStatement.execute("UNLOCK TABLES");
                 }
             }
 
@@ -130,6 +138,7 @@ public class Facturar {
         statement.execute("INSERT INTO cistella_producte (idProducte,idCistella) VALUES (1,1);");
         statement.execute("INSERT INTO cistella_producte (idProducte,idCistella) VALUES (2,1);");
         statement.execute("INSERT INTO cistella_producte (idProducte,idCistella) VALUES (3,1);");
+        statement.execute("INSERT INTO cistella_producte (idProducte,idCistella) VALUES (4,1);");
 
         statement.execute("INSERT INTO cistella_producte (idProducte,idCistella) VALUES (2,2);");
         statement.execute("INSERT INTO cistella_producte (idProducte,idCistella) VALUES (3,2);");
@@ -173,48 +182,37 @@ public class Facturar {
 
         Double totalFactura = 0D;
 
-        connection.setAutoCommit(false);
 
-        Statement statement = connection.createStatement();
+        basketPstmt.setInt(1, idCistella);
+        ResultSet rs = basketPstmt.executeQuery();
 
-        statement.execute("LOCK TABLES producte WRITE, cistella_producte WRITE, cistella WRITE, factura_producte WRITE;");
+        // !! Ferem el càlcul del total de la factura aquí, per tal d'estalviar-nos una query.
 
-        try {
+        Integer productesFacturats = 0;
+        while (rs.next()) {
 
-            basketPstmt.setInt(1, idCistella);
-            ResultSet rs = basketPstmt.executeQuery();
+            Integer idProducte = rs.getInt(2);
+            Integer stock = rs.getInt(3);
 
-            // !! Ferem el càlcul del total de la factura aquí, per tal d'estalviar-nos una query.
+            if (stock >= 1) {
 
-            Integer productesFacturats = 0;
-            while (rs.next()) {
+                facturarStmt.setInt(1, idFactura);
+                facturarStmt.setInt(2, idProducte);
+                facturarStmt.execute();
 
-                Integer idProducte = rs.getInt(2);
-                Integer stock = rs.getInt(3);
+                stockStmt.setInt(1, idProducte);
+                stockStmt.execute();
 
-                if (stock >= 1) {
-
-                    facturarStmt.setInt(1, idFactura);
-                    facturarStmt.setInt(2, idProducte);
-                    facturarStmt.execute();
-
-                    stockStmt.setInt(1, idProducte);
-                    stockStmt.execute();
-
-                    totalFactura += rs.getDouble(4);
-                    productesFacturats++;
-
-                }
+                totalFactura += rs.getDouble(4);
+                productesFacturats++;
 
             }
 
-            if (productesFacturats == 0) {
+        }
 
-                throw new ReturnToSavePointException();
-            }
+        if (productesFacturats == 0) {
 
-        } finally {
-            statement.execute("UNLOCK TABLES");
+            throw new ReturnToSavePointException();
         }
 
 
